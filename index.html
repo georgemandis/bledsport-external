@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bLEDsport — Spectator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #111;
+    color: #eee;
+    font-family: monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 0.3rem; }
+  .info { font-size: 0.85rem; color: #888; margin-bottom: 0.8rem; }
+  canvas { border-radius: 8px; cursor: crosshair; }
+  .status { margin-top: 0.4rem; font-size: 0.75rem; color: #555; }
+  .scoreboard {
+    margin-top: 0.6rem;
+    font-size: 0.85rem;
+    text-align: center;
+    min-height: 1.5em;
+  }
+  .score-entry { display: inline-block; margin: 0 10px; }
+</style>
+</head>
+<body>
+<h1>bLEDsport</h1>
+<div class="info">Click the arch to drop a Hand of God bomb!</div>
+<canvas id="arch"></canvas>
+<div class="status" id="status">Connecting...</div>
+<div class="scoreboard" id="scoreboard"></div>
+
+<script>
+const NUM_LEDS = 192;
+const ZONES = [
+  { name: 'left',  start: 0,   end: 57  },
+  { name: 'top',   start: 58,  end: 134 },
+  { name: 'right', start: 135, end: 191 },
+];
+
+// ============================================================
+// CONNECTION
+// ============================================================
+const conn = {
+  ws: null,
+  ready: false,
+  reconnectTimer: null,
+
+  connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    this.ws = new WebSocket(`${proto}//${location.host}/ws`);
+    document.getElementById('status').textContent = 'Connecting...';
+
+    this.ws.onopen = () => {
+      this.ready = true;
+      document.getElementById('status').textContent = 'Spectating';
+      document.getElementById('status').style.color = '#4a4';
+    };
+
+    this.ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'state') {
+        gameState.players = msg.players;
+        gameState.waves = msg.waves;
+        gameState.powerups = msg.powerups || [];
+        gameState.bombs = msg.bombs || [];
+        gameState.fires = msg.fires || [];
+        gameState.animTime = msg.animTime;
+        gameState.gamePhase = msg.gamePhase;
+        gameState.victoryColor = msg.victoryColor;
+        gameState.victoryPlayerName = msg.victoryPlayerName;
+        renderer.draw();
+      }
+    };
+
+    this.ws.onclose = () => {
+      this.ready = false;
+      document.getElementById('status').textContent = 'Disconnected — reconnecting...';
+      document.getElementById('status').style.color = '#a84';
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = setTimeout(() => this.connect(), 1000);
+    };
+
+    this.ws.onerror = () => { this.ws.close(); };
+  },
+
+  send(msg) {
+    if (this.ws && this.ready) this.ws.send(JSON.stringify(msg));
+  }
+};
+
+// ============================================================
+// GAME STATE
+// ============================================================
+const gameState = {
+  players: [],
+  waves: [],
+  powerups: [],
+  bombs: [],
+  fires: [],
+  animTime: 0,
+  gamePhase: 'waiting',
+  victoryColor: null,
+  victoryPlayerName: '',
+};
+
+// ============================================================
+// RENDERER
+// ============================================================
+const canvas = document.getElementById('arch');
+const ctx = canvas.getContext('2d');
+
+const renderer = {
+  ledPositions: [],
+  LEFT_END: 57,
+  TOP_START: 58,
+  TOP_END: 134,
+  RIGHT_START: 135,
+
+  computeLayout() {
+    const w = Math.min(window.innerWidth - 40, 800);
+    const h = Math.min(window.innerHeight - 200, 500);
+    canvas.width = w;
+    canvas.height = h;
+    const pad = 40;
+    const leftX = pad;
+    const rightX = w - pad;
+    const topY = pad;
+    const bottomY = h - pad / 2;
+
+    const leftCount = this.LEFT_END + 1;
+    const topCount = this.TOP_END - this.TOP_START + 1;
+    const rightCount = NUM_LEDS - this.RIGHT_START;
+
+    this.ledPositions = [];
+    for (let i = 0; i < NUM_LEDS; i++) {
+      let x, y;
+      if (i <= this.LEFT_END) {
+        const t = i / (leftCount - 1);
+        x = leftX;
+        y = bottomY - t * (bottomY - topY);
+      } else if (i <= this.TOP_END) {
+        const t = (i - this.TOP_START) / (topCount - 1);
+        x = leftX + t * (rightX - leftX);
+        y = topY;
+      } else {
+        const t = (i - this.RIGHT_START) / (rightCount - 1);
+        x = rightX;
+        y = topY + t * (bottomY - topY);
+      }
+      this.ledPositions.push({ x, y });
+    }
+  },
+
+  draw() {
+    const pixels = new Array(NUM_LEDS).fill(null);
+    const t = gameState.animTime;
+
+    // Portal glow
+    const PORTAL_GLOW = 3;
+    const portalPulse = 0.3 + 0.3 * Math.sin(t * 4);
+    const portalSwirl = 0.15 * Math.sin(t * 7);
+    for (let d = 0; d < PORTAL_GLOW; d++) {
+      const fade = (1 - d / PORTAL_GLOW) * portalPulse;
+      const s2 = portalSwirl * (1 - d / PORTAL_GLOW);
+      pixels[d] = [Math.round(255*(fade+s2)), Math.round(140*(fade+s2)), Math.round(20*fade)];
+      pixels[NUM_LEDS-1-d] = [Math.round(20*fade), Math.round(100*(fade+s2)), Math.round(255*(fade+s2))];
+    }
+
+    // Power-ups
+    for (const pu of gameState.powerups) {
+      const hue = (t * 2 + pu.pos * 0.02) % 1;
+      const shimmer = 0.6 + 0.4 * Math.sin(t * 5 + pu.pos * 0.5);
+      const [r, g, b] = hslToRgb(hue, 1, 0.4 * shimmer);
+      pixels[pu.pos] = [r, g, b];
+      for (let d2 = 1; d2 <= 1; d2++) {
+        const h2 = (hue + d2 * 0.15) % 1;
+        const [r2, g2, b2] = hslToRgb(h2, 1, 0.15 * shimmer);
+        if (pu.pos - d2 >= 0) pixels[pu.pos - d2] = [r2, g2, b2];
+        if (pu.pos + d2 < NUM_LEDS) pixels[pu.pos + d2] = [r2, g2, b2];
+      }
+    }
+
+    // Bombs
+    for (const b of gameState.bombs) {
+      if (b.exploding) {
+        const maxR = 8, maxF = 10;
+        const r = Math.round(b.explodeFrame * (maxR / maxF));
+        const fade = 1 - b.explodeFrame / maxF;
+        for (let d = -r; d <= r; d++) {
+          const led = b.pos + d;
+          if (led >= 0 && led < NUM_LEDS) {
+            const dist = Math.abs(d) / (r + 1);
+            const bri = fade * (1 - dist * 0.5);
+            pixels[led] = [Math.round(255 * bri), Math.round(100 * bri * fade), 0];
+          }
+        }
+      } else {
+        const half = Math.floor(b.width / 2);
+        const pulse = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 10));
+        for (let d = -half; d <= half; d++) {
+          const led = b.pos + d;
+          if (led >= 0 && led < NUM_LEDS) {
+            const edge = 1 - Math.abs(d) / (half + 1) * 0.5;
+            pixels[led] = [Math.round(220 * pulse * edge), 0, 0];
+          }
+        }
+      }
+    }
+
+    // Fires
+    for (const f of gameState.fires) {
+      const fadeOut = 1 - f.age * 0.5;
+      const flicker = 0.6 + 0.4 * Math.sin(t * 15 + f.pos * 3);
+      const bri = fadeOut * flicker;
+      if (f.pos >= 0 && f.pos < NUM_LEDS) {
+        pixels[f.pos] = [Math.round(255 * bri), Math.round(80 * bri), 0];
+      }
+    }
+
+    // Waves
+    for (const w of gameState.waves) {
+      const r = Math.round(w.radius);
+      const owner = gameState.players.find(p => p.id === w.owner);
+      const wColor = owner ? owner.color : [255, 255, 255];
+      const hue = (t * 3) % 1;
+      const [hr, hg, hb] = hslToRgb(hue, 1, 0.5);
+      const mix = (a, b) => Math.round(a * 0.5 + b * 0.5);
+      const c = [mix(hr, wColor[0]), mix(hg, wColor[1]), mix(hb, wColor[2])];
+      const p1 = w.center + r;
+      const p2 = w.center - r;
+      if (p1 >= 0 && p1 < NUM_LEDS) pixels[p1] = c;
+      if (p2 >= 0 && p2 < NUM_LEDS) pixels[p2] = c;
+    }
+
+    // Players
+    for (const p of gameState.players) {
+      if (!p.alive) {
+        const flash = Math.sin(t * 10) > 0;
+        if (flash && p.pos >= 0 && p.pos < NUM_LEDS) pixels[p.pos] = [80, 0, 0];
+        continue;
+      }
+      if (p.shieldActive) {
+        for (let d = -1; d <= 1; d++) {
+          const led = p.pos + d;
+          if (led >= 0 && led < NUM_LEDS && d !== 0) {
+            const shimmer = 0.5 + 0.5 * Math.sin(t * 6 + d);
+            pixels[led] = [Math.round(200 * shimmer), Math.round(220 * shimmer), Math.round(255 * shimmer)];
+          }
+        }
+      }
+      const recharging = !p.hasDash;
+      const pulse = recharging ? 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 8)) : 1;
+      pixels[p.pos] = [
+        Math.round(p.color[0] * pulse),
+        Math.round(p.color[1] * pulse),
+        Math.round(p.color[2] * pulse),
+      ];
+    }
+
+    // Canvas render
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const dotR = Math.max(3, Math.min(6, canvas.width / NUM_LEDS * 0.8));
+
+    for (let i = 0; i < NUM_LEDS; i++) {
+      const { x, y } = this.ledPositions[i];
+      ctx.beginPath();
+      ctx.arc(x, y, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fill();
+    }
+
+    for (let i = 0; i < NUM_LEDS; i++) {
+      const c = pixels[i];
+      if (!c) continue;
+      const { x, y } = this.ledPositions[i];
+      const [cr, cg, cb] = c;
+      const brightness = Math.max(cr, cg, cb) / 255;
+
+      const glow = dotR * (1 + brightness * 2);
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, glow);
+      grad.addColorStop(0, `rgba(${cr},${cg},${cb},${brightness * 0.5})`);
+      grad.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+      ctx.beginPath();
+      ctx.arc(x, y, glow, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(x, y, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
+      ctx.fill();
+    }
+
+    // Phase-specific HUD
+    if (gameState.gamePhase === 'victory' && gameState.victoryColor) {
+      const [vr, vg, vb] = gameState.victoryColor;
+      ctx.fillStyle = `rgb(${vr},${vg},${vb})`;
+      ctx.font = 'bold 28px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${gameState.victoryPlayerName} WINS!`, canvas.width / 2, canvas.height / 2);
+    } else if (gameState.gamePhase === 'waiting') {
+      ctx.fillStyle = '#888';
+      ctx.font = 'bold 18px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('Waiting for players...', canvas.width / 2, canvas.height / 2 - 10);
+      ctx.font = '13px monospace';
+      ctx.fillText(`${gameState.players.length} player(s)`, canvas.width / 2, canvas.height / 2 + 15);
+    }
+
+    // Tick marks
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    for (let i = 0; i < NUM_LEDS; i += 10) {
+      const { x, y } = this.ledPositions[i];
+      ctx.fillStyle = '#333';
+      ctx.fillText(i + 1, x, y + dotR + 12);
+    }
+
+    // Scoreboard
+    const sb = document.getElementById('scoreboard');
+    sb.innerHTML = gameState.players
+      .sort((a, b) => b.score - a.score)
+      .map(p => {
+        const style = `color:rgb(${p.color.join(',')});`;
+        const dead = p.alive ? '' : ' [dead]';
+        return `<span class="score-entry" style="${style}">${p.name}: ${p.score}${dead}</span>`;
+      })
+      .join('');
+  }
+};
+
+// ============================================================
+// HAND OF GOD — click to drop bomb
+// ============================================================
+canvas.addEventListener('click', (e) => {
+  if (gameState.gamePhase !== 'playing') return;
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  let closest = 0;
+  let closestDist = Infinity;
+  for (let i = 0; i < renderer.ledPositions.length; i++) {
+    const lp = renderer.ledPositions[i];
+    const dx = lp.x - cx;
+    const dy = lp.y - cy;
+    const dist = dx * dx + dy * dy;
+    if (dist < closestDist) {
+      closestDist = dist;
+      closest = i;
+    }
+  }
+  conn.send({ type: 'god_bomb', pos: closest });
+});
+
+// ============================================================
+// UTILS
+// ============================================================
+function hslToRgb(h, s, l) {
+  let r, g, b;
+  if (s === 0) { r = g = b = l; }
+  else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1/3);
+  }
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+}
+
+// ============================================================
+// INIT
+// ============================================================
+renderer.computeLayout();
+conn.connect();
+window.addEventListener('resize', () => { renderer.computeLayout(); renderer.draw(); });
+</script>
+</body>
+</html>
