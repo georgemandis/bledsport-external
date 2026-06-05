@@ -71,11 +71,9 @@ const conn = {
         gameState.powerups = msg.powerups || [];
         gameState.bombs = msg.bombs || [];
         gameState.fires = msg.fires || [];
-        gameState.animTime = msg.animTime;
         gameState.gamePhase = msg.gamePhase;
         gameState.victoryColor = msg.victoryColor;
         gameState.victoryPlayerName = msg.victoryPlayerName;
-        renderer.draw();
       }
     };
 
@@ -387,7 +385,15 @@ function hslToRgb(h, s, l) {
 // ============================================================
 renderer.computeLayout();
 conn.connect();
-window.addEventListener('resize', () => { renderer.computeLayout(); renderer.draw(); });
+window.addEventListener('resize', () => { renderer.computeLayout(); });
+
+// Local animation loop — runs independently of server updates
+function animLoop() {
+  gameState.animTime += 0.03;
+  renderer.draw();
+  requestAnimationFrame(animLoop);
+}
+requestAnimationFrame(animLoop);
 </script>
 </body>
 </html>
