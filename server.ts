@@ -1,10 +1,10 @@
 // bLEDsport External Server
-// Receives game state from the local game server via WebSocket,
+// Receives binary game state from the local game server via WebSocket,
 // re-broadcasts to browser spectators, and relays spectator inputs back.
 
 const spectators = new Set<any>();
 let gameServerWs: any = null;
-let latestState: string | null = null;
+let latestState: Buffer | null = null;
 
 const server = Bun.serve({
   port: Number(process.env.PORT) || 3000,
@@ -47,7 +47,7 @@ const server = Bun.serve({
       } else {
         spectators.add(ws);
         ws.send(JSON.stringify({ type: "spectating" }));
-        // Send latest state so they don't see a blank screen
+        // Send latest binary state so they don't see a blank screen
         if (latestState) ws.send(latestState);
         console.log(`Spectator connected (${spectators.size} total)`);
       }
@@ -55,17 +55,16 @@ const server = Bun.serve({
     message(ws, message) {
       const role = (ws.data as any).role;
       if (role === "game") {
-        // Game server sending state — broadcast to all spectators
-        const data = typeof message === "string" ? message : Buffer.from(message).toString();
-        latestState = data;
+        // Game server sending binary state — pass through to all spectators
+        const buf = typeof message === "string" ? Buffer.from(message) : Buffer.from(message);
+        latestState = buf;
         for (const s of spectators) {
-          s.send(data);
+          s.send(buf);
         }
       } else {
-        // Spectator sending input — forward to game server
+        // Spectator sending JSON input — forward to game server
         if (gameServerWs) {
-          const data = typeof message === "string" ? message : Buffer.from(message).toString();
-          gameServerWs.send(data);
+          gameServerWs.send(message);
         }
       }
     },
