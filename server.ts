@@ -6,6 +6,12 @@ const spectators = new Set<any>();
 let gameServerWs: any = null;
 let latestState: Buffer | null = null;
 
+function notifySpectatorCount() {
+  if (gameServerWs) {
+    gameServerWs.send(JSON.stringify({ type: "spectators", count: spectators.size }));
+  }
+}
+
 const server = Bun.serve({
   port: Number(process.env.PORT) || 3000,
   fetch(req, server) {
@@ -44,12 +50,13 @@ const server = Bun.serve({
       if (role === "game") {
         gameServerWs = ws;
         console.log("Game server connected");
+        notifySpectatorCount();
       } else {
         spectators.add(ws);
         ws.send(JSON.stringify({ type: "spectating" }));
-        // Send latest binary state so they don't see a blank screen
         if (latestState) ws.send(latestState);
         console.log(`Spectator connected (${spectators.size} total)`);
+        notifySpectatorCount();
       }
     },
     message(ws, message) {
@@ -76,6 +83,7 @@ const server = Bun.serve({
       } else {
         spectators.delete(ws);
         console.log(`Spectator disconnected (${spectators.size} total)`);
+        notifySpectatorCount();
       }
     },
   },
