@@ -2,7 +2,14 @@
   "version": "1.0",
   "services": {
     "web": {
-      "port": 3000
+      "port": 3000,
+      "publishedPorts": [
+        {
+          "publishedAs": 4048,
+          "fromContainerPort": 4048,
+          "protocol": "udp"
+        }
+      ]
     }
   }
 }
