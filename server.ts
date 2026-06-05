@@ -83,7 +83,7 @@ const server = Bun.serve({
   </style>
 </head>
 <body>
-  <h1>bLEDsport</h1>
+  <h1>bLEDsport (v2)</h1>
   <p>Server is running.</p>
 
   <h2>LED Control</h2>
