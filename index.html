@@ -98,7 +98,6 @@ const gameState = {
   powerups: [],
   bombs: [],
   fires: [],
-  cornerWalls: [],
   randomWalls: [],
   sweeper: null,
   portalA: 0,
@@ -178,15 +177,6 @@ const renderer = {
       const bLed = pB + d * bDir;
       if (bLed >= 0 && bLed < NUM_LEDS)
         pixels[bLed] = [Math.round(20*fade), Math.round(100*(fade+s2)), Math.round(255*(fade+s2))];
-    }
-
-    // Corner walls (orange)
-    for (const w of (gameState.cornerWalls || [])) {
-      const half = Math.floor(w.size / 2);
-      for (let d = -half; d <= half; d++) {
-        const led = w.pos + d;
-        if (led >= 0 && led < NUM_LEDS) pixels[led] = [200, 120, 0];
-      }
     }
 
     // Random walls (orange)
@@ -486,14 +476,8 @@ function unpackState(buf) {
     gameState.fires.push({ pos, age });
   }
 
-  // Corner walls, random walls, sweeper, portals (bounds-checked for old servers)
+  // Random walls, sweeper, portals (bounds-checked for old servers)
   if (off < buf.length) {
-    const cornerWallCount = buf[off++] || 0;
-    gameState.cornerWalls = [];
-    for (let i = 0; i < cornerWallCount; i++) {
-      gameState.cornerWalls.push({ pos: buf[off++], size: buf[off++] });
-    }
-
     // Random walls
     const randomWallCount = buf[off++] || 0;
     gameState.randomWalls = [];
