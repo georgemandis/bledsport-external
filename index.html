@@ -98,6 +98,11 @@ const gameState = {
   powerups: [],
   bombs: [],
   fires: [],
+  cornerWalls: [],
+  randomWalls: [],
+  sweeper: null,
+  portalA: 0,
+  portalB: 191,
   animTime: 0,
   gamePhase: 'waiting',
   victoryColor: null,
@@ -156,15 +161,57 @@ const renderer = {
     const pixels = new Array(NUM_LEDS).fill(null);
     const t = gameState.animTime;
 
-    // Portal glow
+    // Portal glow (dynamic positions)
     const PORTAL_GLOW = 3;
+    const pA = gameState.portalA != null ? gameState.portalA : 0;
+    const pB = gameState.portalB != null ? gameState.portalB : NUM_LEDS - 1;
     const portalPulse = 0.3 + 0.3 * Math.sin(t * 4);
     const portalSwirl = 0.15 * Math.sin(t * 7);
     for (let d = 0; d < PORTAL_GLOW; d++) {
       const fade = (1 - d / PORTAL_GLOW) * portalPulse;
       const s2 = portalSwirl * (1 - d / PORTAL_GLOW);
-      pixels[d] = [Math.round(255*(fade+s2)), Math.round(140*(fade+s2)), Math.round(20*fade)];
-      pixels[NUM_LEDS-1-d] = [Math.round(20*fade), Math.round(100*(fade+s2)), Math.round(255*(fade+s2))];
+      const aDir = pA === 0 ? 1 : -1;
+      const aLed = pA + d * aDir;
+      if (aLed >= 0 && aLed < NUM_LEDS)
+        pixels[aLed] = [Math.round(255*(fade+s2)), Math.round(140*(fade+s2)), Math.round(20*fade)];
+      const bDir = pB === NUM_LEDS - 1 ? -1 : 1;
+      const bLed = pB + d * bDir;
+      if (bLed >= 0 && bLed < NUM_LEDS)
+        pixels[bLed] = [Math.round(20*fade), Math.round(100*(fade+s2)), Math.round(255*(fade+s2))];
+    }
+
+    // Corner walls (orange)
+    for (const w of (gameState.cornerWalls || [])) {
+      const half = Math.floor(w.size / 2);
+      for (let d = -half; d <= half; d++) {
+        const led = w.pos + d;
+        if (led >= 0 && led < NUM_LEDS) pixels[led] = [200, 120, 0];
+      }
+    }
+
+    // Random walls (orange)
+    for (const w of (gameState.randomWalls || [])) {
+      const half = Math.floor(w.size / 2);
+      for (let d = -half; d <= half; d++) {
+        const led = w.pos + d;
+        if (led >= 0 && led < NUM_LEDS) pixels[led] = [200, 120, 0];
+      }
+    }
+
+    // Sweeper (red if lethal, gray if barrier)
+    if (gameState.sweeper) {
+      const s = gameState.sweeper;
+      for (let i = 0; i < s.size; i++) {
+        const led = s.pos + i;
+        if (led >= 0 && led < NUM_LEDS) {
+          if (s.lethal) {
+            const pulse = 0.5 + 0.5 * Math.sin(gameState.animTime * 8);
+            pixels[led] = [Math.round(255 * pulse), 0, 0];
+          } else {
+            pixels[led] = [100, 100, 90];
+          }
+        }
+      }
     }
 
     // Power-ups
@@ -437,6 +484,37 @@ function unpackState(buf) {
     const pos = buf[off++];
     const age = buf[off++] / 255;
     gameState.fires.push({ pos, age });
+  }
+
+  // Corner walls, random walls, sweeper, portals (bounds-checked for old servers)
+  if (off < buf.length) {
+    const cornerWallCount = buf[off++] || 0;
+    gameState.cornerWalls = [];
+    for (let i = 0; i < cornerWallCount; i++) {
+      gameState.cornerWalls.push({ pos: buf[off++], size: buf[off++] });
+    }
+
+    // Random walls
+    const randomWallCount = buf[off++] || 0;
+    gameState.randomWalls = [];
+    for (let i = 0; i < randomWallCount; i++) {
+      gameState.randomWalls.push({ pos: buf[off++], size: buf[off++] });
+    }
+
+    // Sweeper
+    const sweeperFlags = buf[off++] || 0;
+    gameState.sweeper = null;
+    if (sweeperFlags & 1) {
+      gameState.sweeper = {
+        pos: buf[off++],
+        size: buf[off++],
+        lethal: !!(sweeperFlags & 2),
+      };
+    }
+
+    // Portal positions
+    gameState.portalA = buf[off++] || 0;
+    gameState.portalB = buf[off++] || 191;
   }
 
   // Victory data
