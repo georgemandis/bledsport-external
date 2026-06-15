@@ -15,6 +15,7 @@
     align-items: center;
     justify-content: center;
     min-height: 100vh;
+    overflow: hidden;
   }
   h1 { font-size: 2.5rem; margin-bottom: 0.4rem; }
   .info { font-size: 1.5rem; color: #bbb; margin-bottom: 1rem; }
@@ -133,11 +134,18 @@ const renderer = {
   RIGHT_START: 135,
 
   computeLayout() {
-    const w = Math.min(window.innerWidth - 40, 800);
-    const h = Math.min(window.innerHeight - 200, 500);
+    // Arch fills nearly the whole viewport. Reserve a little room for the chrome
+    // (title/info above, scoreboard/status below) and keep a small edge padding.
+    const EDGE_PAD = 8;        // gap between canvas and viewport left/right edges
+    const CHROME_TOP = 120;    // room reserved above the canvas (title + info)
+    const CHROME_BOTTOM = 90;  // room reserved below the canvas (scoreboard + status)
+    const ARCH_PAD = 12;       // inset of the LED dots from the canvas edges
+
+    const w = Math.max(200, window.innerWidth - EDGE_PAD * 2);
+    const h = Math.max(200, window.innerHeight - CHROME_TOP - CHROME_BOTTOM);
     canvas.width = w;
     canvas.height = h;
-    const pad = 40;
+    const pad = ARCH_PAD;
     const leftX = pad;
     const rightX = w - pad;
     const topY = pad;
