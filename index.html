@@ -115,6 +115,8 @@ const gameState = {
   victoryPlayerName: '',
   matchDurationSec: 0,
   timerDeadline: 0, // performance.now() timestamp when the countdown hits zero
+  lastElapsedSec: 0, // server's last-reported elapsed; used to detect a match restart
+  lastDurationSec: 0,
 };
 
 // ============================================================
@@ -550,10 +552,23 @@ function unpackState(buf) {
     const matchElapsedSec = (buf[off] << 8) | buf[off + 1]; off += 2;
     gameState.matchDurationSec = matchDurationSec;
     if (matchDurationSec > 0 && gameState.gamePhase === 'playing') {
-      const remainingMs = Math.max(0, (matchDurationSec - matchElapsedSec) * 1000);
-      gameState.timerDeadline = performance.now() + remainingMs;
+      // Anchor the local deadline ONCE per match and let it run freely. Re-anchoring
+      // on every packet makes the countdown jitter/stall (elapsed is floored to whole
+      // seconds, so it re-syncs forward within each second). Only (re)anchor on a fresh
+      // match: no current deadline, the duration changed, or elapsed jumped backward.
+      const restarted = !gameState.timerDeadline ||
+        matchDurationSec !== gameState.lastDurationSec ||
+        matchElapsedSec < gameState.lastElapsedSec;
+      if (restarted) {
+        const remainingMs = Math.max(0, (matchDurationSec - matchElapsedSec) * 1000);
+        gameState.timerDeadline = performance.now() + remainingMs;
+      }
+      gameState.lastElapsedSec = matchElapsedSec;
+      gameState.lastDurationSec = matchDurationSec;
     } else {
       gameState.timerDeadline = 0;
+      gameState.lastElapsedSec = 0;
+      gameState.lastDurationSec = 0;
     }
   } else {
     // Old server without timer support
