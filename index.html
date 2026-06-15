@@ -462,6 +462,73 @@ function spawnOrb() {
   });
 }
 
+// Nearest arch LED index to a screen point (squared distance).
+function nearestLed(px, py) {
+  let best = 0, bestDist = Infinity;
+  const pts = renderer.ledPositions;
+  for (let i = 0; i < pts.length; i++) {
+    const dx = pts[i].x - px, dy = pts[i].y - py;
+    const d = dx * dx + dy * dy;
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  return best;
+}
+
+function orbAtPoint(px, py) {
+  // topmost orb under the point, within grab radius
+  for (let i = orbs.length - 1; i >= 0; i--) {
+    const o = orbs[i];
+    const dx = o.x - px, dy = o.y - py;
+    if (dx * dx + dy * dy <= ORB.RADIUS * ORB.RADIUS * 4) return o; // 2x radius grab
+  }
+  return null;
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const px = e.clientX - rect.left, py = e.clientY - rect.top;
+  const o = orbAtPoint(px, py);
+  if (!o) return;
+  heldOrb = o;
+  o.state = 'held';
+  o.anchorX = o.x;       // launch origin
+  o.anchorY = o.y;
+  o.pullX = px;          // current pointer (= pulled position)
+  o.pullY = py;
+  o.vx = 0; o.vy = 0;
+  canvas.setPointerCapture(e.pointerId);
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!heldOrb) return;
+  const rect = canvas.getBoundingClientRect();
+  heldOrb.pullX = e.clientX - rect.left;
+  heldOrb.pullY = e.clientY - rect.top;
+  heldOrb.x = heldOrb.pullX;
+  heldOrb.y = heldOrb.pullY;
+});
+
+canvas.addEventListener('pointerup', (e) => {
+  if (!heldOrb) return;
+  const o = heldOrb;
+  heldOrb = null;
+  const pullX = o.pullX - o.anchorX;
+  const pullY = o.pullY - o.anchorY;
+  const pullLen = Math.hypot(pullX, pullY);
+  if (pullLen < ORB.MIN_PULL) {
+    o.x = o.anchorX; o.y = o.anchorY;
+    o.state = 'drifting';
+    return;
+  }
+  let vx = -pullX * ORB.FLING_K;
+  let vy = -pullY * ORB.FLING_K;
+  const sp = Math.hypot(vx, vy);
+  if (sp > ORB.MAX_SPEED) { vx = vx / sp * ORB.MAX_SPEED; vy = vy / sp * ORB.MAX_SPEED; }
+  o.vx = vx; o.vy = vy;
+  o.x = o.anchorX; o.y = o.anchorY; // launch from the anchor
+  o.state = 'flying';
+});
+
 function updateOrbs(now) {
   if (now >= nextSpawnAt && orbs.length < ORB.MAX_COUNT) {
     spawnOrb();
