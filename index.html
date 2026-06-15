@@ -106,6 +106,8 @@ const gameState = {
   gamePhase: 'waiting',
   victoryColor: null,
   victoryPlayerName: '',
+  matchDurationSec: 0,
+  timerDeadline: 0, // performance.now() timestamp when the countdown hits zero
 };
 
 // ============================================================
@@ -393,7 +395,7 @@ canvas.addEventListener('click', (e) => {
 // ============================================================
 // BINARY STATE DECODER
 // ============================================================
-const PHASES = ['waiting', 'playing', 'victory'];
+const PHASES = ['waiting', 'playing', 'victory', 'suddenDeath'];
 
 function unpackState(buf) {
   let off = 0;
@@ -513,6 +515,23 @@ function unpackState(buf) {
   } else if (phase !== 2) {
     gameState.victoryColor = null;
     gameState.victoryPlayerName = '';
+  }
+
+  // Timer anchors (last 4 bytes, present on all phases from newer servers)
+  if (off + 4 <= buf.length) {
+    const matchDurationSec = (buf[off] << 8) | buf[off + 1]; off += 2;
+    const matchElapsedSec = (buf[off] << 8) | buf[off + 1]; off += 2;
+    gameState.matchDurationSec = matchDurationSec;
+    if (matchDurationSec > 0 && gameState.gamePhase === 'playing') {
+      const remainingMs = Math.max(0, (matchDurationSec - matchElapsedSec) * 1000);
+      gameState.timerDeadline = performance.now() + remainingMs;
+    } else {
+      gameState.timerDeadline = 0;
+    }
+  } else {
+    // Old server without timer support
+    gameState.matchDurationSec = 0;
+    gameState.timerDeadline = 0;
   }
 }
 
