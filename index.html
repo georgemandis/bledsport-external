@@ -536,6 +536,7 @@ function updateOrbs(now) {
   }
 
   const w = canvas.width, h = canvas.height;
+  const glowRadiusPx = Math.min(w, h) * ORB.GLOW_RADIUS_FRAC;
   for (let i = orbs.length - 1; i >= 0; i--) {
     const o = orbs[i];
     if (o.state === 'drifting') {
@@ -543,12 +544,52 @@ function updateOrbs(now) {
       o.vy += (h / 2 - o.y) * ORB.CENTER_PULL;
       o.x += o.vx;
       o.y += o.vy;
-      if (now - o.bornAt > ORB.LIFETIME_MS) {
+      if (now - o.bornAt > ORB.LIFETIME_MS) orbs.splice(i, 1);
+    } else if (o.state === 'held') {
+      // position driven by pointermove; nothing to integrate
+    } else if (o.state === 'flying') {
+      o.x += o.vx;
+      o.y += o.vy;
+      o.vx *= ORB.FRICTION;
+      o.vy *= ORB.FRICTION;
+
+      // edge collision
+      if (o.x < 0 || o.x > w || o.y < 0 || o.y > h) {
+        explodeOrb(o, o.y > h /* exited bottom? */);
         orbs.splice(i, 1);
+        continue;
+      }
+
+      // too-soft throw: revert to drifting
+      if (Math.hypot(o.vx, o.vy) < ORB.STALL_SPEED) {
+        o.state = 'drifting';
+        o.bornAt = now; // reset lifetime
+        continue;
+      }
+
+      // proximity glow → throttled orb_glow message
+      const led = nearestLed(o.x, o.y);
+      const lp = renderer.ledPositions[led];
+      const dist = Math.hypot(lp.x - o.x, lp.y - o.y);
+      if (dist <= glowRadiusPx && now - o.lastGlowAt >= ORB.GLOW_THROTTLE_MS) {
+        const intensity = 1 - dist / glowRadiusPx;
+        conn.send({ type: 'orb_glow', pos: led, intensity });
+        o.lastGlowAt = now;
       }
     }
-    // 'held' and 'flying' handled in later tasks
   }
+}
+
+function explodeOrb(o, exitedBottom) {
+  // visual burst at the orb's last position (clamped into view)
+  const bx = Math.max(0, Math.min(canvas.width, o.x));
+  const by = Math.max(0, Math.min(canvas.height, o.y));
+  orbBursts.push({ x: bx, y: by, max: 60, bornAt: performance.now() });
+
+  if (exitedBottom) return; // wasted — no arch response
+
+  const led = nearestLed(bx, by);
+  conn.send({ type: 'god_bomb', pos: led });
 }
 
 const orbBursts = []; // {x, y, max, bornAt}
