@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>bLEDsport — Spectator</title>
+<title>bLEDsport — Projection</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #111;
-    color: #eee;
+    background: #fff;
+    color: #111;
     font-family: monospace;
     display: flex;
     flex-direction: column;
@@ -16,22 +16,22 @@
     justify-content: center;
     min-height: 100vh;
   }
-  h1 { font-size: 1.4rem; margin-bottom: 0.3rem; }
-  .info { font-size: 0.85rem; color: #888; margin-bottom: 0.8rem; }
+  h1 { font-size: 2.4rem; margin-bottom: 0.4rem; }
+  .info { font-size: 1.1rem; color: #555; margin-bottom: 1.2rem; }
   canvas { border-radius: 8px; cursor: crosshair; }
-  .status { margin-top: 0.4rem; font-size: 0.75rem; color: #555; }
+  .status { margin-top: 0.6rem; font-size: 1rem; color: #999; }
   .scoreboard {
-    margin-top: 0.6rem;
-    font-size: 0.85rem;
+    margin-top: 1rem;
+    font-size: 1.6rem;
     text-align: center;
     min-height: 1.5em;
   }
-  .score-entry { display: inline-block; margin: 0 10px; }
+  .score-entry { display: inline-block; margin: 0 16px; }
 </style>
 </head>
 <body>
 <h1>bLEDsport</h1>
-<div class="info">Click the arch to drop a Hand of God bomb! &middot; Double-click for fullscreen &middot; <a href="/projection" style="color:#6cf;">Projection mode</a></div>
+<div class="info">Click the arch to drop a Hand of God bomb! &middot; Double-click for fullscreen &middot; <a href="/" style="color:#06c;">Spectator view</a></div>
 <canvas id="arch"></canvas>
 <div class="status" id="status">Connecting...</div>
 <div class="scoreboard" id="scoreboard"></div>
@@ -314,7 +314,7 @@ const renderer = {
       const { x, y } = this.ledPositions[i];
       ctx.beginPath();
       ctx.arc(x, y, dotR, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillStyle = 'rgba(0,0,0,0.10)'; // faint dark base dots, visible on white
       ctx.fill();
     }
 
@@ -340,20 +340,28 @@ const renderer = {
       ctx.fill();
     }
 
+    // Helper: draw big HUD text with a dark outline so bright colors stay legible on white
+    const hudText = (text, color, font, y = canvas.height / 2) => {
+      ctx.font = font;
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+      ctx.strokeText(text, canvas.width / 2, y);
+      ctx.fillStyle = color;
+      ctx.fillText(text, canvas.width / 2, y);
+    };
+
     // Phase-specific HUD
     if (gameState.gamePhase === 'victory' && gameState.victoryColor) {
       const [vr, vg, vb] = gameState.victoryColor;
-      ctx.fillStyle = `rgb(${vr},${vg},${vb})`;
+      hudText(`${gameState.victoryPlayerName} WINS!`, `rgb(${vr},${vg},${vb})`, 'bold 44px monospace');
+    } else if (gameState.gamePhase === 'waiting') {
+      ctx.fillStyle = '#444';
       ctx.font = 'bold 28px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`${gameState.victoryPlayerName} WINS!`, canvas.width / 2, canvas.height / 2);
-    } else if (gameState.gamePhase === 'waiting') {
-      ctx.fillStyle = '#888';
-      ctx.font = 'bold 18px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('Waiting for players...', canvas.width / 2, canvas.height / 2 - 10);
-      ctx.font = '13px monospace';
-      ctx.fillText(`${gameState.players.length} player(s)`, canvas.width / 2, canvas.height / 2 + 15);
+      ctx.fillText('Waiting for players...', canvas.width / 2, canvas.height / 2 - 14);
+      ctx.font = '20px monospace';
+      ctx.fillText(`${gameState.players.length} player(s)`, canvas.width / 2, canvas.height / 2 + 22);
     }
 
     // Countdown timer (center of arch, during normal play)
@@ -361,28 +369,22 @@ const renderer = {
       const remainingMs = gameState.timerDeadline - performance.now();
       const text = formatClock(remainingMs);
       const urgent = remainingMs <= 10000;
-      ctx.fillStyle = urgent ? '#ff4040' : '#ffcc44';
-      ctx.font = 'bold 30px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+      hudText(text, urgent ? '#e00000' : '#cc8800', 'bold 48px monospace');
     }
 
     // Sudden death banner
     if (gameState.gamePhase === 'suddenDeath') {
       const pulse = 0.6 + 0.4 * Math.sin(gameState.animTime * 6);
-      ctx.fillStyle = `rgba(255,60,60,${pulse})`;
-      ctx.font = 'bold 30px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('SUDDEN DEATH', canvas.width / 2, canvas.height / 2);
+      hudText('SUDDEN DEATH', `rgba(210,0,0,${pulse})`, 'bold 44px monospace');
     }
 
     // Tick marks
-    ctx.font = '10px monospace';
+    ctx.font = '13px monospace';
     ctx.textAlign = 'center';
     for (let i = 0; i < NUM_LEDS; i += 10) {
       const { x, y } = this.ledPositions[i];
-      ctx.fillStyle = '#333';
-      ctx.fillText(i + 1, x, y + dotR + 12);
+      ctx.fillStyle = '#aaa';
+      ctx.fillText(i + 1, x, y + dotR + 14);
     }
 
     // Scoreboard
