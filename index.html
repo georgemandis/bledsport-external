@@ -31,7 +31,7 @@
 </head>
 <body>
 <h1>bLEDsport</h1>
-<div class="info">Click the arch to drop a Hand of God bomb!</div>
+<div class="info">Click the arch to drop a Hand of God bomb! &middot; Double-click for fullscreen</div>
 <canvas id="arch"></canvas>
 <div class="status" id="status">Connecting...</div>
 <div class="scoreboard" id="scoreboard"></div>
@@ -402,6 +402,7 @@ const renderer = {
 // HAND OF GOD — click to drop bomb
 // ============================================================
 canvas.addEventListener('click', (e) => {
+  if (e.detail > 1) return; // part of a double-click (fullscreen toggle), not a bomb
   if (gameState.gamePhase !== 'playing') return;
   const rect = canvas.getBoundingClientRect();
   const cx = e.clientX - rect.left;
@@ -419,6 +420,17 @@ canvas.addEventListener('click', (e) => {
     }
   }
   conn.send({ type: 'god_bomb', pos: closest });
+});
+
+// ============================================================
+// FULLSCREEN — double-click anywhere to toggle
+// ============================================================
+document.addEventListener('dblclick', () => {
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
 });
 
 // ============================================================
