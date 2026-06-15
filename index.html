@@ -425,6 +425,75 @@ document.addEventListener('dblclick', () => {
 });
 
 // ============================================================
+// THROWABLE ORBS
+// ============================================================
+const ORB = {
+  SPAWN_MIN_MS: 5000,    // min gap between spawns
+  SPAWN_MAX_MS: 8000,    // max gap between spawns
+  MAX_COUNT: 3,          // max concurrent orbs
+  LIFETIME_MS: 12000,    // a drifting orb expires after this
+  RADIUS: 16,            // visual + grab radius (px)
+  DRIFT_SPEED: 0.25,     // gentle drift velocity (px/frame baseline)
+  CENTER_PULL: 0.0006,   // soft steer back toward center
+  FLING_K: 0.18,         // launch speed = pull distance * FLING_K
+  MAX_SPEED: 22,         // cap launch speed (px/frame)
+  FRICTION: 0.992,       // per-frame velocity decay in flight
+  STALL_SPEED: 1.2,      // below this, a flying orb reverts to drifting
+  MIN_PULL: 12,          // pull shorter than this = mis-grab, no launch
+  GLOW_RADIUS_FRAC: 0.25,// glow kicks in within this fraction of min(vw,vh)
+  GLOW_THROTTLE_MS: 100, // min gap between orb_glow sends
+};
+
+const orbs = [];
+let heldOrb = null;
+let nextSpawnAt = 0;
+
+function spawnOrb() {
+  const w = canvas.width, h = canvas.height;
+  const jitter = () => (Math.random() - 0.5);
+  orbs.push({
+    x: w / 2 + jitter() * w * 0.2,
+    y: h / 2 + jitter() * h * 0.2,
+    vx: jitter() * ORB.DRIFT_SPEED,
+    vy: jitter() * ORB.DRIFT_SPEED,
+    state: 'drifting',
+    bornAt: performance.now(),
+    lastGlowAt: 0,
+  });
+}
+
+function updateOrbs(now) {
+  if (now >= nextSpawnAt && orbs.length < ORB.MAX_COUNT) {
+    spawnOrb();
+    nextSpawnAt = now + ORB.SPAWN_MIN_MS + Math.random() * (ORB.SPAWN_MAX_MS - ORB.SPAWN_MIN_MS);
+  }
+
+  const w = canvas.width, h = canvas.height;
+  for (let i = orbs.length - 1; i >= 0; i--) {
+    const o = orbs[i];
+    if (o.state === 'drifting') {
+      o.vx += (w / 2 - o.x) * ORB.CENTER_PULL;
+      o.vy += (h / 2 - o.y) * ORB.CENTER_PULL;
+      o.x += o.vx;
+      o.y += o.vy;
+      if (now - o.bornAt > ORB.LIFETIME_MS) {
+        orbs.splice(i, 1);
+      }
+    }
+    // 'held' and 'flying' handled in later tasks
+  }
+}
+
+function drawOrbs() {
+  for (const o of orbs) {
+    ctx.beginPath();
+    ctx.arc(o.x, o.y, ORB.RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fill();
+  }
+}
+
+// ============================================================
 // BINARY STATE DECODER
 // ============================================================
 const PHASES = ['waiting', 'playing', 'victory', 'suddenDeath'];
@@ -614,6 +683,8 @@ window.addEventListener('resize', () => { renderer.computeLayout(); });
 function animLoop() {
   gameState.animTime += 0.03;
   renderer.draw();
+  updateOrbs(performance.now());
+  drawOrbs();
   requestAnimationFrame(animLoop);
 }
 requestAnimationFrame(animLoop);
