@@ -44,6 +44,13 @@ const ZONES = [
   { name: 'right', start: 135, end: 191 },
 ];
 
+function formatClock(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 // ============================================================
 // CONNECTION
 // ============================================================
@@ -345,6 +352,26 @@ const renderer = {
       ctx.fillText('Waiting for players...', canvas.width / 2, canvas.height / 2 - 10);
       ctx.font = '13px monospace';
       ctx.fillText(`${gameState.players.length} player(s)`, canvas.width / 2, canvas.height / 2 + 15);
+    }
+
+    // Countdown timer (center of arch, during normal play)
+    if (gameState.gamePhase === 'playing' && gameState.matchDurationSec > 0 && gameState.timerDeadline) {
+      const remainingMs = gameState.timerDeadline - performance.now();
+      const text = formatClock(remainingMs);
+      const urgent = remainingMs <= 10000;
+      ctx.fillStyle = urgent ? '#ff4040' : '#ffcc44';
+      ctx.font = 'bold 30px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+    }
+
+    // Sudden death banner
+    if (gameState.gamePhase === 'suddenDeath') {
+      const pulse = 0.6 + 0.4 * Math.sin(gameState.animTime * 6);
+      ctx.fillStyle = `rgba(255,60,60,${pulse})`;
+      ctx.font = 'bold 30px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('SUDDEN DEATH', canvas.width / 2, canvas.height / 2);
     }
 
     // Tick marks
