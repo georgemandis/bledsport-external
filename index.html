@@ -551,12 +551,76 @@ function updateOrbs(now) {
   }
 }
 
+const orbBursts = []; // {x, y, max, bornAt}
+
 function drawOrbs() {
+  drawArchProximityGlow();
+
+  const now = performance.now();
+
+  // Explosion bursts (expanding ring)
+  for (let i = orbBursts.length - 1; i >= 0; i--) {
+    const b = orbBursts[i];
+    const t = (now - b.bornAt) / 350;
+    if (t >= 1) { orbBursts.splice(i, 1); continue; }
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.max * t, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,255,255,${1 - t})`;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+
   for (const o of orbs) {
+    // Slingshot aim line while held
+    if (o.state === 'held') {
+      const dx = o.anchorX - o.pullX, dy = o.anchorY - o.pullY; // launch dir = opposite pull
+      ctx.beginPath();
+      ctx.moveTo(o.pullX, o.pullY);
+      ctx.lineTo(o.anchorX + dx, o.anchorY + dy);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Soft glow halo
+    const grad = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, ORB.RADIUS * 2.2);
+    grad.addColorStop(0, 'rgba(255,255,255,0.6)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.beginPath();
+    ctx.arc(o.x, o.y, ORB.RADIUS * 2.2, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Core
     ctx.beginPath();
     ctx.arc(o.x, o.y, ORB.RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
     ctx.fill();
+  }
+}
+
+function drawArchProximityGlow() {
+  const w = canvas.width, h = canvas.height;
+  const glowRadiusPx = Math.min(w, h) * ORB.GLOW_RADIUS_FRAC;
+  for (const o of orbs) {
+    if (o.state !== 'flying') continue;
+    const led = nearestLed(o.x, o.y);
+    const lp = renderer.ledPositions[led];
+    const dist = Math.hypot(lp.x - o.x, lp.y - o.y);
+    if (dist > glowRadiusPx) continue;
+    const intensity = 1 - dist / glowRadiusPx; // 0..1
+    for (let d = -3; d <= 3; d++) {
+      const idx = led + d;
+      if (idx < 0 || idx >= renderer.ledPositions.length) continue;
+      const p = renderer.ledPositions[idx];
+      const fall = (1 - Math.abs(d) / 4) * intensity;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(180,220,255,${0.6 * fall})`;
+      ctx.fill();
+    }
   }
 }
 
