@@ -16,22 +16,22 @@
     justify-content: center;
     min-height: 100vh;
   }
-  h1 { font-size: 1.4rem; margin-bottom: 0.3rem; }
-  .info { font-size: 0.85rem; color: #888; margin-bottom: 0.8rem; }
+  h1 { font-size: 2.5rem; margin-bottom: 0.4rem; }
+  .info { font-size: 1.5rem; color: #bbb; margin-bottom: 1rem; }
   canvas { border-radius: 8px; cursor: crosshair; }
-  .status { margin-top: 0.4rem; font-size: 0.75rem; color: #555; }
+  .status { margin-top: 0.6rem; font-size: 1.3rem; color: #888; }
   .scoreboard {
-    margin-top: 0.6rem;
-    font-size: 0.85rem;
+    margin-top: 1rem;
+    font-size: 1.5rem;
     text-align: center;
     min-height: 1.5em;
   }
-  .score-entry { display: inline-block; margin: 0 10px; }
+  .score-entry { display: inline-block; margin: 0 18px; }
 </style>
 </head>
 <body>
 <h1>bLEDsport</h1>
-<div class="info">Click the arch to drop a Hand of God bomb! &middot; Double-click for fullscreen &middot; <a href="/projection" style="color:#6cf;">Projection mode</a></div>
+<div class="info">Click the arch to drop a Hand of God bomb! &middot; Double-click for fullscreen</div>
 <canvas id="arch"></canvas>
 <div class="status" id="status">Connecting...</div>
 <div class="scoreboard" id="scoreboard"></div>
@@ -344,16 +344,16 @@ const renderer = {
     if (gameState.gamePhase === 'victory' && gameState.victoryColor) {
       const [vr, vg, vb] = gameState.victoryColor;
       ctx.fillStyle = `rgb(${vr},${vg},${vb})`;
-      ctx.font = 'bold 28px monospace';
+      ctx.font = 'bold 50px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(`${gameState.victoryPlayerName} WINS!`, canvas.width / 2, canvas.height / 2);
     } else if (gameState.gamePhase === 'waiting') {
-      ctx.fillStyle = '#888';
-      ctx.font = 'bold 18px monospace';
+      ctx.fillStyle = '#ccc';
+      ctx.font = 'bold 32px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('Waiting for players...', canvas.width / 2, canvas.height / 2 - 10);
-      ctx.font = '13px monospace';
-      ctx.fillText(`${gameState.players.length} player(s)`, canvas.width / 2, canvas.height / 2 + 15);
+      ctx.fillText('Waiting for players...', canvas.width / 2, canvas.height / 2 - 18);
+      ctx.font = '22px monospace';
+      ctx.fillText(`${gameState.players.length} player(s)`, canvas.width / 2, canvas.height / 2 + 26);
     }
 
     // Countdown timer (center of arch, during normal play)
@@ -361,17 +361,17 @@ const renderer = {
       const remainingMs = gameState.timerDeadline - performance.now();
       const text = formatClock(remainingMs);
       const urgent = remainingMs <= 10000;
-      ctx.fillStyle = urgent ? '#ff4040' : '#ffcc44';
-      ctx.font = 'bold 30px monospace';
+      ctx.fillStyle = urgent ? '#ff5050' : '#ffd84d';
+      ctx.font = 'bold 54px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(text, canvas.width / 2, canvas.height / 2);
     }
 
     // Sudden death banner
     if (gameState.gamePhase === 'suddenDeath') {
-      const pulse = 0.6 + 0.4 * Math.sin(gameState.animTime * 6);
-      ctx.fillStyle = `rgba(255,60,60,${pulse})`;
-      ctx.font = 'bold 30px monospace';
+      const pulse = 0.7 + 0.3 * Math.sin(gameState.animTime * 6);
+      ctx.fillStyle = `rgba(255,80,80,${pulse})`;
+      ctx.font = 'bold 50px monospace';
       ctx.textAlign = 'center';
       ctx.fillText('SUDDEN DEATH', canvas.width / 2, canvas.height / 2);
     }

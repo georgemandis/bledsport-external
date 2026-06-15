@@ -41,11 +41,6 @@ const server = Bun.serve({
       });
     }
 
-    // Projection mode: light-background, large-text variant for projecting inside the arch
-    if (url.pathname === "/projection") {
-      return new Response(Bun.file(new URL("./projection.html", import.meta.url).pathname));
-    }
-
     // Serve the spectator page
     return new Response(Bun.file(new URL("./index.html", import.meta.url).pathname));
   },
