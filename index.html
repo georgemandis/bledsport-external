@@ -10,21 +10,30 @@
     background: #111;
     color: #eee;
     font-family: monospace;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
     overflow: hidden;
   }
-  h1 { font-size: 2.5rem; margin-bottom: 0.4rem; }
-  .info { font-size: 1.5rem; color: #bbb; margin-bottom: 1rem; }
-  canvas { border-radius: 8px; cursor: crosshair; }
-  .status { margin-top: 0.6rem; font-size: 1.3rem; color: #888; }
-  .scoreboard {
-    margin-top: 1rem;
-    font-size: 1.5rem;
+  /* Arch canvas is a full-viewport background layer; chrome floats on top. */
+  canvas {
+    position: fixed;
+    inset: 0;
+    cursor: crosshair;
+    z-index: 0;
+  }
+  /* Chrome overlays the arch */
+  h1, .info, .status, .scoreboard {
+    position: fixed;
+    left: 0;
+    right: 0;
     text-align: center;
+    z-index: 1;
+    pointer-events: none; /* let clicks fall through to the canvas (Hand of God) */
+  }
+  h1 { top: 0.4rem; font-size: 2.5rem; }
+  .info { top: 3.8rem; font-size: 1.5rem; color: #bbb; }
+  .status { bottom: 0.5rem; font-size: 1.3rem; color: #888; }
+  .scoreboard {
+    bottom: 2.2rem;
+    font-size: 1.5rem;
     min-height: 1.5em;
   }
   .score-entry { display: inline-block; margin: 0 18px; }
@@ -134,22 +143,20 @@ const renderer = {
   RIGHT_START: 135,
 
   computeLayout() {
-    // Arch fills nearly the whole viewport. Reserve a little room for the chrome
-    // (title/info above, scoreboard/status below) and keep a small edge padding.
-    const EDGE_PAD = 8;        // gap between canvas and viewport left/right edges
-    const CHROME_TOP = 120;    // room reserved above the canvas (title + info)
-    const CHROME_BOTTOM = 90;  // room reserved below the canvas (scoreboard + status)
-    const ARCH_PAD = 12;       // inset of the LED dots from the canvas edges
+    // Canvas fills the entire viewport; chrome (title/scoreboard) overlays on top.
+    // The arch runs right up to all edges. ARCH_PAD is the only inset.
+    const ARCH_PAD = 10;        // inset of the LED dots from the viewport edges
+    const BOTTOM_PAD = 28;      // extra room at the bottom so the scoreboard/status clear the arch
 
-    const w = Math.max(200, window.innerWidth - EDGE_PAD * 2);
-    const h = Math.max(200, window.innerHeight - CHROME_TOP - CHROME_BOTTOM);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
     canvas.width = w;
     canvas.height = h;
     const pad = ARCH_PAD;
     const leftX = pad;
     const rightX = w - pad;
     const topY = pad;
-    const bottomY = h - pad / 2;
+    const bottomY = h - BOTTOM_PAD;
 
     const leftCount = this.LEFT_END + 1;
     const topCount = this.TOP_END - this.TOP_START + 1;
