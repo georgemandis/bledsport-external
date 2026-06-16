@@ -43,6 +43,103 @@ function notifySpectatorCount() {
   }
 }
 
+const NUM_LEDS = 192;
+// Map a normalized edge-exit point to an arch LED index. -1 = bottom (wasted).
+function edgeToLed(x: number, y: number): number {
+  const overLeft = -x, overRight = x - 1, overTop = -y, overBottom = y - 1;
+  const m = Math.max(overLeft, overRight, overTop, overBottom);
+  if (m === overBottom) return -1;
+  if (m === overLeft) {
+    const t = Math.min(1, Math.max(0, y));
+    return Math.round((1 - t) * 57);
+  }
+  if (m === overTop) {
+    const t = Math.min(1, Math.max(0, x));
+    return 58 + Math.round(t * (134 - 58));
+  }
+  const t = Math.min(1, Math.max(0, y));
+  return 135 + Math.round(t * (191 - 135));
+}
+
+function spawnOrb() {
+  const j = () => (Math.random() - 0.5);
+  orbs.push({
+    id: nextOrbId++,
+    x: 0.5 + j() * 0.2, y: 0.5 + j() * 0.2,
+    vx: j() * ORB.DRIFT_SPEED, vy: j() * ORB.DRIFT_SPEED,
+    state: 'drifting', bornAt: Date.now(), heldBy: null, lastGlowAt: 0,
+    anchorX: 0, anchorY: 0, pullX: 0, pullY: 0,
+  });
+}
+
+function sendToGame(msg: any) {
+  if (gameServerWs) gameServerWs.send(JSON.stringify(msg));
+}
+
+function orbTick() {
+  const now = Date.now();
+  if (now >= nextSpawnAt && orbs.length < ORB.MAX_COUNT) {
+    spawnOrb();
+    nextSpawnAt = now + ORB.SPAWN_MIN_MS + Math.random() * (ORB.SPAWN_MAX_MS - ORB.SPAWN_MIN_MS);
+  }
+  for (let i = orbs.length - 1; i >= 0; i--) {
+    const o = orbs[i];
+    if (o.state === 'drifting') {
+      o.vx += (0.5 - o.x) * ORB.CENTER_PULL;
+      o.vy += (0.5 - o.y) * ORB.CENTER_PULL;
+      o.x += o.vx; o.y += o.vy;
+      if (now - o.bornAt > ORB.LIFETIME_MS) orbs.splice(i, 1);
+    } else if (o.state === 'flying') {
+      o.x += o.vx; o.y += o.vy;
+      o.vx *= ORB.FRICTION; o.vy *= ORB.FRICTION;
+      if (o.x < 0 || o.x > 1 || o.y < 0 || o.y > 1) {
+        const led = edgeToLed(o.x, o.y);
+        if (led >= 0) sendToGame({ type: 'god_bomb', pos: led });
+        orbs.splice(i, 1);
+        continue;
+      }
+      if (Math.hypot(o.vx, o.vy) < ORB.STALL_SPEED) {
+        o.state = 'drifting'; o.bornAt = now; continue;
+      }
+      const edgeDist = Math.min(o.x, 1 - o.x, o.y); // nearest non-bottom edge
+      if (edgeDist <= ORB.GLOW_RADIUS_FRAC && now - o.lastGlowAt >= ORB.GLOW_THROTTLE_MS) {
+        // predict the LED for the nearest non-bottom edge by clamping toward it
+        let ex = o.x, ey = o.y;
+        if (edgeDist === o.x) ex = 0; else if (edgeDist === 1 - o.x) ex = 1; else ey = 0;
+        const led = edgeToLed(ex, ey);
+        if (led >= 0) {
+          const intensity = 1 - edgeDist / ORB.GLOW_RADIUS_FRAC;
+          sendToGame({ type: 'orb_glow', pos: led, intensity });
+          o.lastGlowAt = now;
+        }
+      }
+    }
+  }
+  broadcastOrbs();
+}
+
+function broadcastOrbs() {
+  const payload = JSON.stringify({
+    type: 'orb_state',
+    orbs: orbs.map(o => ({
+      id: o.id, x: o.x, y: o.y, state: o.state, heldBy: o.heldBy,
+      anchorX: o.anchorX, anchorY: o.anchorY, pullX: o.pullX, pullY: o.pullY,
+    })),
+  });
+  for (const s of spectators) s.send(payload);
+}
+
+function startOrbSim() {
+  if (orbTimer) return;
+  nextSpawnAt = Date.now() + 1000;
+  orbTimer = setInterval(orbTick, ORB.TICK_MS);
+}
+
+function stopOrbSim() {
+  if (orbTimer) { clearInterval(orbTimer); orbTimer = null; }
+  orbs.length = 0;
+}
+
 const server = Bun.serve({
   port: Number(process.env.PORT) || 3000,
   fetch(req, server) {
@@ -115,8 +212,11 @@ const server = Bun.serve({
         console.log("Game server disconnected");
       } else {
         spectators.delete(ws);
+        const id = (ws.data as any).id;
+        for (const o of orbs) if (o.heldBy === id) { o.heldBy = null; o.state = 'drifting'; o.bornAt = Date.now(); }
         console.log(`Spectator disconnected (${spectators.size} total)`);
         notifySpectatorCount();
+        if (spectators.size === 0) stopOrbSim();
       }
     },
   },
