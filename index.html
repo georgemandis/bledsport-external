@@ -429,22 +429,7 @@ document.addEventListener('dblclick', () => {
 // ============================================================
 // THROWABLE ORBS
 // ============================================================
-const ORB = {
-  SPAWN_MIN_MS: 5000,    // min gap between spawns
-  SPAWN_MAX_MS: 8000,    // max gap between spawns
-  MAX_COUNT: 3,          // max concurrent orbs
-  LIFETIME_MS: 12000,    // a drifting orb expires after this
-  RADIUS: 16,            // visual + grab radius (px)
-  DRIFT_SPEED: 0.25,     // gentle drift velocity (px/frame baseline)
-  CENTER_PULL: 0.0006,   // soft steer back toward center
-  FLING_K: 0.18,         // launch speed = pull distance * FLING_K
-  MAX_SPEED: 22,         // cap launch speed (px/frame)
-  FRICTION: 0.992,       // per-frame velocity decay in flight
-  STALL_SPEED: 1.2,      // below this, a flying orb reverts to drifting
-  MIN_PULL: 12,          // pull shorter than this = mis-grab, no launch
-  GLOW_RADIUS_FRAC: 0.25,// glow kicks in within this fraction of min(vw,vh)
-  GLOW_THROTTLE_MS: 100, // min gap between orb_glow sends
-};
+const ORB_GLOW_RADIUS_FRAC = 0.25; // on-screen proximity glow radius (fraction of min viewport dim)
 
 // Synced orbs come from the relay as normalized 0..1 coords.
 let orbs = [];          // latest snapshot
@@ -520,12 +505,35 @@ canvas.addEventListener('pointerup', (e) => {
 
 const orbBursts = []; // {x, y, max, bornAt}
 
+function drawArchProximityGlow() {
+  const w = canvas.width, h = canvas.height;
+  const glowRadiusPx = Math.min(w, h) * ORB_GLOW_RADIUS_FRAC;
+  for (const o of orbs) {
+    if (o.state !== 'flying') continue;
+    const px = o.x * w, py = o.y * h;
+    const led = nearestLed(px, py);
+    const lp = renderer.ledPositions[led];
+    const dist = Math.hypot(lp.x - px, lp.y - py);
+    if (dist > glowRadiusPx) continue;
+    const intensity = 1 - dist / glowRadiusPx;
+    for (let d = -3; d <= 3; d++) {
+      const idx = led + d;
+      if (idx < 0 || idx >= renderer.ledPositions.length) continue;
+      const p = renderer.ledPositions[idx];
+      const fall = (1 - Math.abs(d) / 4) * intensity;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(180,220,255,${0.6 * fall})`;
+      ctx.fill();
+    }
+  }
+}
+
 function drawOrbs() {
   drawArchProximityGlow();
-
+  const w = canvas.width, h = canvas.height;
   const now = performance.now();
 
-  // Explosion bursts (expanding ring)
   for (let i = orbBursts.length - 1; i >= 0; i--) {
     const b = orbBursts[i];
     const t = (now - b.bornAt) / 350;
@@ -537,57 +545,33 @@ function drawOrbs() {
     ctx.stroke();
   }
 
+  const R = 16;
   for (const o of orbs) {
-    // Slingshot aim line while held
+    const ox = o.x * w, oy = o.y * h;
     if (o.state === 'held') {
-      const dx = o.anchorX - o.pullX, dy = o.anchorY - o.pullY; // launch dir = opposite pull
+      const ax = o.anchorX * w, ay = o.anchorY * h;
+      const px = o.pullX * w, py = o.pullY * h;
+      const dx = ax - px, dy = ay - py;
       ctx.beginPath();
-      ctx.moveTo(o.pullX, o.pullY);
-      ctx.lineTo(o.anchorX + dx, o.anchorY + dy);
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6, 6]);
+      ctx.moveTo(px, py);
+      ctx.lineTo(ax + dx, ay + dy);
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([8, 6]);
       ctx.stroke();
       ctx.setLineDash([]);
     }
-
-    // Soft glow halo
-    const grad = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, ORB.RADIUS * 2.2);
+    const grad = ctx.createRadialGradient(ox, oy, 0, ox, oy, R * 2.2);
     grad.addColorStop(0, 'rgba(255,255,255,0.6)');
     grad.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.beginPath();
-    ctx.arc(o.x, o.y, ORB.RADIUS * 2.2, 0, Math.PI * 2);
+    ctx.arc(ox, oy, R * 2.2, 0, Math.PI * 2);
     ctx.fillStyle = grad;
     ctx.fill();
-
-    // Core
     ctx.beginPath();
-    ctx.arc(o.x, o.y, ORB.RADIUS, 0, Math.PI * 2);
+    ctx.arc(ox, oy, R, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
     ctx.fill();
-  }
-}
-
-function drawArchProximityGlow() {
-  const w = canvas.width, h = canvas.height;
-  const glowRadiusPx = Math.min(w, h) * ORB.GLOW_RADIUS_FRAC;
-  for (const o of orbs) {
-    if (o.state !== 'flying') continue;
-    const led = nearestLed(o.x, o.y);
-    const lp = renderer.ledPositions[led];
-    const dist = Math.hypot(lp.x - o.x, lp.y - o.y);
-    if (dist > glowRadiusPx) continue;
-    const intensity = 1 - dist / glowRadiusPx; // 0..1
-    for (let d = -3; d <= 3; d++) {
-      const idx = led + d;
-      if (idx < 0 || idx >= renderer.ledPositions.length) continue;
-      const p = renderer.ledPositions[idx];
-      const fall = (1 - Math.abs(d) / 4) * intensity;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(180,220,255,${0.6 * fall})`;
-      ctx.fill();
-    }
   }
 }
 
