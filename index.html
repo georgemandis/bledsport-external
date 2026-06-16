@@ -430,6 +430,17 @@ document.addEventListener('dblclick', () => {
 // THROWABLE ORBS
 // ============================================================
 const ORB_GLOW_RADIUS_FRAC = 0.25; // on-screen proximity glow radius (fraction of min viewport dim)
+const THROW_CONE_DEG = 50; // must match the relay; aim line previews the clamped launch direction
+// Clamp a direction vector to ±THROW_CONE_DEG of straight-up (screen up = -y), preserving length.
+function clampDirToCone(dx, dy) {
+  const len = Math.hypot(dx, dy);
+  if (len === 0) return [0, 0];
+  const angle = Math.atan2(dx, -dy);
+  const max = THROW_CONE_DEG * Math.PI / 180;
+  const c = Math.max(-max, Math.min(max, angle));
+  if (c === angle) return [dx, dy];
+  return [Math.sin(c) * len, -Math.cos(c) * len];
+}
 
 // Synced orbs come from the relay as normalized 0..1 coords.
 let orbs = [];          // latest snapshot
@@ -551,9 +562,9 @@ function drawOrbs() {
     if (o.state === 'held') {
       const ax = o.anchorX * w, ay = o.anchorY * h;
       const px = o.pullX * w, py = o.pullY * h;
-      const dx = ax - px, dy = ay - py;
+      const [dx, dy] = clampDirToCone(ax - px, ay - py); // preview the clamped launch direction
       ctx.beginPath();
-      ctx.moveTo(px, py);
+      ctx.moveTo(ax, ay);
       ctx.lineTo(ax + dx, ay + dy);
       ctx.strokeStyle = 'rgba(255,255,255,0.85)';
       ctx.lineWidth = 4;

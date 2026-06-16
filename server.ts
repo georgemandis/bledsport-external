@@ -22,6 +22,8 @@ const ORB = {
   MIN_PULL: 0.02,        // normalized pull below this = mis-grab
   GLOW_RADIUS_FRAC: 0.25,
   GLOW_THROTTLE_MS: 100,
+  THROW_CONE_DEG: 50,    // max launch angle from straight-up (each side); clamps side throws
+                         // to correct for the arch's long vertical sides vs the projection.
 };
 
 type Orb = {
@@ -59,6 +61,19 @@ function edgeToLed(x: number, y: number): number {
   }
   const t = Math.min(1, Math.max(0, y));
   return 135 + Math.round(t * (191 - 135));
+}
+
+// Clamp a launch velocity to within ±THROW_CONE_DEG of straight-up (screen up = -y),
+// preserving speed. Throws aimed wider (or downward) snap to the nearest cone edge.
+function clampToCone(vx: number, vy: number): [number, number] {
+  const speed = Math.hypot(vx, vy);
+  if (speed === 0) return [0, 0];
+  // angle measured from straight-up, positive toward +x (right)
+  const angle = Math.atan2(vx, -vy); // -vy because up is negative y
+  const max = (ORB.THROW_CONE_DEG * Math.PI) / 180;
+  const clamped = Math.max(-max, Math.min(max, angle));
+  if (clamped === angle) return [vx, vy];
+  return [Math.sin(clamped) * speed, -Math.cos(clamped) * speed];
 }
 
 function spawnOrb() {
@@ -226,6 +241,7 @@ const server = Bun.serve({
               let vx = -dx * ORB.FLING_K, vy = -dy * ORB.FLING_K;
               const sp = Math.hypot(vx, vy);
               if (sp > ORB.MAX_SPEED) { vx = vx / sp * ORB.MAX_SPEED; vy = vy / sp * ORB.MAX_SPEED; }
+              [vx, vy] = clampToCone(vx, vy); // restrict to ±THROW_CONE_DEG from straight-up
               o.vx = vx; o.vy = vy; o.state = 'flying';
             }
           }
