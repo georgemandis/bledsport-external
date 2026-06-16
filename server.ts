@@ -199,8 +199,37 @@ const server = Bun.serve({
           s.send(buf);
         }
       } else {
-        // Spectator sending JSON input — forward to game server
-        if (gameServerWs) {
+        let input: any = null;
+        try { input = JSON.parse(typeof message === "string" ? message : message.toString()); } catch {}
+        const sid = (ws.data as any).id;
+        if (input && input.type === 'orb_claim') {
+          const o = orbs.find(o => o.id === input.id);
+          if (o && o.heldBy == null && o.state !== 'flying') {
+            o.heldBy = sid; o.state = 'held';
+            o.anchorX = o.x; o.anchorY = o.y; o.pullX = o.x; o.pullY = o.y;
+            o.vx = 0; o.vy = 0;
+          }
+        } else if (input && input.type === 'orb_drag') {
+          const o = orbs.find(o => o.id === input.id);
+          if (o && o.heldBy === sid) {
+            o.pullX = input.x; o.pullY = input.y; o.x = input.x; o.y = input.y;
+          }
+        } else if (input && input.type === 'orb_release') {
+          const o = orbs.find(o => o.id === input.id);
+          if (o && o.heldBy === sid) {
+            o.heldBy = null;
+            const dx = o.pullX - o.anchorX, dy = o.pullY - o.anchorY;
+            const pullLen = Math.hypot(dx, dy);
+            o.x = o.anchorX; o.y = o.anchorY;
+            if (pullLen < ORB.MIN_PULL) { o.state = 'drifting'; o.bornAt = Date.now(); }
+            else {
+              let vx = -dx * ORB.FLING_K, vy = -dy * ORB.FLING_K;
+              const sp = Math.hypot(vx, vy);
+              if (sp > ORB.MAX_SPEED) { vx = vx / sp * ORB.MAX_SPEED; vy = vy / sp * ORB.MAX_SPEED; }
+              o.vx = vx; o.vy = vy; o.state = 'flying';
+            }
+          }
+        } else if (gameServerWs) {
           gameServerWs.send(message);
         }
       }
