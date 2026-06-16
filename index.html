@@ -584,6 +584,67 @@ function drawOrbs() {
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
     ctx.fill();
   }
+  drawCursors();
+}
+
+// ============================================================
+// SPECTATOR CURSORS (Yjs Awareness over /yjs broadcast room)
+// ============================================================
+let awareness = null;
+const myCursorColor = `hsl(${Math.floor(Math.random() * 360)}, 80%, 60%)`;
+const cursorTrails = {}; // clientID -> [{x,y}, ...] normalized
+
+(async () => {
+  try {
+    const Y = await import('https://esm.sh/yjs@13');
+    const { WebsocketProvider } = await import('https://esm.sh/y-websocket@2');
+    const doc = new Y.Doc();
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const provider = new WebsocketProvider(`${proto}//${location.host}/yjs`, 'bledsport-cursors', doc);
+    awareness = provider.awareness;
+    awareness.setLocalStateField('color', myCursorColor);
+    window.addEventListener('pointermove', (e) => {
+      if (!awareness) return;
+      awareness.setLocalStateField('cursor', { x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight });
+    });
+  } catch (err) {
+    console.warn('Cursor presence unavailable:', err);
+  }
+})();
+
+function getRemoteCursors() {
+  if (!awareness) return [];
+  const out = [];
+  const me = awareness.clientID;
+  awareness.getStates().forEach((state, id) => {
+    if (id === me || !state.cursor) return;
+    out.push({ id, x: state.cursor.x, y: state.cursor.y, color: state.color || '#fff' });
+  });
+  return out;
+}
+
+function drawCursors() {
+  const w = canvas.width, h = canvas.height;
+  const cursors = getRemoteCursors();
+  const liveIds = new Set(cursors.map(c => c.id));
+  for (const id in cursorTrails) if (!liveIds.has(Number(id))) delete cursorTrails[id];
+
+  for (const c of cursors) {
+    const trail = cursorTrails[c.id] || (cursorTrails[c.id] = []);
+    trail.push({ x: c.x, y: c.y });
+    if (trail.length > 12) trail.shift();
+    for (let i = 0; i < trail.length; i++) {
+      const t = i / trail.length;
+      ctx.beginPath();
+      ctx.arc(trail[i].x * w, trail[i].y * h, 3 + 3 * t, 0, Math.PI * 2);
+      ctx.fillStyle = c.color.replace('hsl', 'hsla').replace(')', `, ${0.12 + 0.25 * t})`);
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.arc(c.x * w, c.y * h, 7, 0, Math.PI * 2);
+    ctx.fillStyle = c.color;
+    ctx.fill();
+  }
 }
 
 // ============================================================
