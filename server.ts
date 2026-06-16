@@ -3,6 +3,7 @@
 // re-broadcasts to browser spectators, and relays spectator inputs back.
 
 const spectators = new Set<any>();
+const yjsClients = new Set<any>();
 let gameServerWs: any = null;
 let latestState: Buffer | null = null;
 
@@ -170,6 +171,12 @@ const server = Bun.serve({
       return new Response("WebSocket upgrade failed", { status: 400 });
     }
 
+    // Yjs cursor presence channel (broadcast room for Awareness)
+    if (url.pathname === "/yjs") {
+      if (server.upgrade(req, { data: { role: "yjs" } })) return;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+
     // Browser spectator connection
     if (url.pathname === "/ws") {
       if (server.upgrade(req, { data: { role: "spectator" } })) return;
@@ -190,6 +197,7 @@ const server = Bun.serve({
   websocket: {
     open(ws) {
       const role = (ws.data as any).role;
+      if (role === "yjs") { yjsClients.add(ws); return; }
       if (role === "game") {
         gameServerWs = ws;
         console.log("Game server connected");
@@ -206,6 +214,11 @@ const server = Bun.serve({
     },
     message(ws, message) {
       const role = (ws.data as any).role;
+      if (role === "yjs") {
+        // broadcast Awareness updates to all other yjs clients
+        for (const c of yjsClients) if (c !== ws) c.send(message);
+        return;
+      }
       if (role === "game") {
         // Game server sending binary state — pass through to all spectators
         const buf = typeof message === "string" ? Buffer.from(message) : Buffer.from(message);
@@ -252,6 +265,7 @@ const server = Bun.serve({
     },
     close(ws) {
       const role = (ws.data as any).role;
+      if (role === "yjs") { yjsClients.delete(ws); return; }
       if (role === "game") {
         gameServerWs = null;
         console.log("Game server disconnected");
