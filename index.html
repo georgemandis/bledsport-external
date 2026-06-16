@@ -478,59 +478,44 @@ function nearestLed(px, py) {
   return best;
 }
 
-function orbAtPoint(px, py) {
-  // topmost orb under the point, within grab radius
+function orbAtPoint(nx, ny) {
+  const grab = 0.04; // normalized grab radius
   for (let i = orbs.length - 1; i >= 0; i--) {
     const o = orbs[i];
-    const dx = o.x - px, dy = o.y - py;
-    if (dx * dx + dy * dy <= ORB.RADIUS * ORB.RADIUS * 4) return o; // 2x radius grab
+    if (o.state === 'flying') continue;
+    const dx = o.x - nx, dy = o.y - ny;
+    if (dx * dx + dy * dy <= grab * grab) return o.id;
   }
   return null;
 }
 
 canvas.addEventListener('pointerdown', (e) => {
   const rect = canvas.getBoundingClientRect();
-  const px = e.clientX - rect.left, py = e.clientY - rect.top;
-  const o = orbAtPoint(px, py);
-  if (!o) return;
-  heldOrb = o;
-  o.state = 'held';
-  o.anchorX = o.x;       // launch origin
-  o.anchorY = o.y;
-  o.pullX = px;          // current pointer (= pulled position)
-  o.pullY = py;
-  o.vx = 0; o.vy = 0;
+  const nx = (e.clientX - rect.left) / canvas.width;
+  const ny = (e.clientY - rect.top) / canvas.height;
+  const id = orbAtPoint(nx, ny);
+  if (id == null) return;
+  myHeldId = id;
+  conn.send({ type: 'orb_claim', id });
   canvas.setPointerCapture(e.pointerId);
 });
 
 canvas.addEventListener('pointermove', (e) => {
-  if (!heldOrb) return;
+  if (myHeldId == null) return;
   const rect = canvas.getBoundingClientRect();
-  heldOrb.pullX = e.clientX - rect.left;
-  heldOrb.pullY = e.clientY - rect.top;
-  heldOrb.x = heldOrb.pullX;
-  heldOrb.y = heldOrb.pullY;
+  const nx = (e.clientX - rect.left) / canvas.width;
+  const ny = (e.clientY - rect.top) / canvas.height;
+  conn.send({ type: 'orb_drag', id: myHeldId, x: nx, y: ny });
 });
 
 canvas.addEventListener('pointerup', (e) => {
-  if (!heldOrb) return;
-  const o = heldOrb;
-  heldOrb = null;
-  const pullX = o.pullX - o.anchorX;
-  const pullY = o.pullY - o.anchorY;
-  const pullLen = Math.hypot(pullX, pullY);
-  if (pullLen < ORB.MIN_PULL) {
-    o.x = o.anchorX; o.y = o.anchorY;
-    o.state = 'drifting';
-    return;
-  }
-  let vx = -pullX * ORB.FLING_K;
-  let vy = -pullY * ORB.FLING_K;
-  const sp = Math.hypot(vx, vy);
-  if (sp > ORB.MAX_SPEED) { vx = vx / sp * ORB.MAX_SPEED; vy = vy / sp * ORB.MAX_SPEED; }
-  o.vx = vx; o.vy = vy;
-  o.x = o.anchorX; o.y = o.anchorY; // launch from the anchor
-  o.state = 'flying';
+  if (myHeldId == null) return;
+  const rect = canvas.getBoundingClientRect();
+  const nx = (e.clientX - rect.left) / canvas.width;
+  const ny = (e.clientY - rect.top) / canvas.height;
+  conn.send({ type: 'orb_drag', id: myHeldId, x: nx, y: ny });
+  conn.send({ type: 'orb_release', id: myHeldId });
+  myHeldId = null;
 });
 
 const orbBursts = []; // {x, y, max, bornAt}
