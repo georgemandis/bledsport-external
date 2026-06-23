@@ -34,6 +34,10 @@ type Orb = {
   anchorX: number; anchorY: number; pullX: number; pullY: number;
 };
 
+// Spectator orbs are disabled; Hand of God runs via click-to-bomb on the game
+// server instead. Flip to true to bring the slingshot-orb feature back.
+const ORBS_ENABLED = false;
+
 const orbs: Orb[] = [];
 let nextOrbId = 1;
 let nextSpectatorId = 1;
@@ -146,6 +150,7 @@ function broadcastOrbs() {
 }
 
 function startOrbSim() {
+  if (!ORBS_ENABLED) return;
   if (orbTimer) return;
   nextSpawnAt = Date.now() + 1000;
   orbTimer = setInterval(orbTick, ORB.TICK_MS);
