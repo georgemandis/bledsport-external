@@ -37,12 +37,13 @@
     min-height: 1.5em;
   }
   .score-entry { display: inline-block; margin: 0 18px; }
-  /* Spectator tool palette — floats top-center, must capture its own clicks. */
+  /* Spectator tool palette — floats dead-center (inside the empty arch),
+     clear of the LED runs along the edges; must capture its own clicks. */
   .palette {
     position: fixed;
-    top: 0.6rem;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, -50%);
     z-index: 2;
     display: flex;
     gap: 8px;
