@@ -37,11 +37,39 @@
     min-height: 1.5em;
   }
   .score-entry { display: inline-block; margin: 0 18px; }
+  /* Spectator tool palette — floats top-center, must capture its own clicks. */
+  .palette {
+    position: fixed;
+    top: 0.6rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    display: flex;
+    gap: 8px;
+    pointer-events: auto;
+  }
+  .tool {
+    font-family: monospace;
+    font-size: 1.1rem;
+    padding: 6px 14px;
+    background: rgba(30, 30, 30, 0.8);
+    color: #ccc;
+    border: 2px solid #444;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tool.active { border-color: #4a4; color: #fff; background: rgba(40, 60, 40, 0.9); }
 </style>
 </head>
 <body>
 <h1>bLEDsport</h1>
 <canvas id="arch"></canvas>
+<div class="palette" id="palette">
+  <div class="tool active" data-tool="god_bomb">💣 Bomb</div>
+  <div class="tool" data-tool="god_wall">🧱 Wall</div>
+  <div class="tool" data-tool="god_powerup">✨ Power-up</div>
+</div>
 <div class="status" id="status">Connecting...</div>
 <div class="scoreboard" id="scoreboard"></div>
 
@@ -415,15 +443,25 @@ const renderer = {
 };
 
 // ============================================================
-// HAND OF GOD — click to drop bomb
+// HAND OF GOD — pick a tool, click the arch to place it
 // ============================================================
+let activeTool = 'god_bomb'; // 'god_bomb' | 'god_wall' | 'god_powerup'
+
+document.getElementById('palette').addEventListener('click', (e) => {
+  const btn = e.target.closest('.tool');
+  if (!btn) return;
+  activeTool = btn.dataset.tool;
+  for (const t of document.querySelectorAll('.tool')) {
+    t.classList.toggle('active', t === btn);
+  }
+});
+
 canvas.addEventListener('click', (e) => {
-  if (e.detail > 1) return; // part of a double-click (fullscreen toggle), not a bomb
   if (gameState.gamePhase !== 'playing') return;
   const rect = canvas.getBoundingClientRect();
   const cx = e.clientX - rect.left;
   const cy = e.clientY - rect.top;
-  conn.send({ type: 'god_bomb', pos: nearestLed(cx, cy) });
+  conn.send({ type: activeTool, pos: nearestLed(cx, cy) });
 });
 
 // ============================================================
