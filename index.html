@@ -145,9 +145,9 @@ const renderer = {
 
   computeLayout() {
     // Canvas fills the entire viewport; chrome (title/scoreboard) overlays on top.
-    // The arch runs right up to all edges. ARCH_PAD is the only inset.
-    const ARCH_PAD = 10;        // inset of the LED dots from the viewport edges
-    const BOTTOM_PAD = 28;      // extra room at the bottom so the scoreboard/status clear the arch
+    // ARCH_PAD insets the LED dots from the viewport edges (extra at the bottom).
+    const ARCH_PAD = 40;        // inset of the LED dots from the viewport edges
+    const BOTTOM_PAD = 58;      // extra room at the bottom so the scoreboard/status clear the arch
 
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -413,17 +413,6 @@ const renderer = {
       .join('');
   }
 };
-
-// ============================================================
-// FULLSCREEN — double-click anywhere to toggle
-// ============================================================
-document.addEventListener('dblclick', () => {
-  if (document.fullscreenElement) {
-    document.exitFullscreen();
-  } else {
-    document.documentElement.requestFullscreen().catch(() => {});
-  }
-});
 
 // ============================================================
 // HAND OF GOD — click to drop bomb
