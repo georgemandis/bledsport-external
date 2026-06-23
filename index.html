@@ -427,6 +427,18 @@ document.addEventListener('dblclick', () => {
 });
 
 // ============================================================
+// HAND OF GOD — click to drop bomb
+// ============================================================
+canvas.addEventListener('click', (e) => {
+  if (e.detail > 1) return; // part of a double-click (fullscreen toggle), not a bomb
+  if (gameState.gamePhase !== 'playing') return;
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  conn.send({ type: 'god_bomb', pos: nearestLed(cx, cy) });
+});
+
+// ============================================================
 // THROWABLE ORBS
 // ============================================================
 const ORB_GLOW_RADIUS_FRAC = 0.25; // on-screen proximity glow radius (fraction of min viewport dim)
